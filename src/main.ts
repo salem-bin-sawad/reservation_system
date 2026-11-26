@@ -3,7 +3,10 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { DataSource } from 'typeorm';
 import { AppModule } from './app.module.js';
+import { User } from './users/entities/user.entity.js';
+import { seedDatabase } from './seeds/seed.util.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -26,6 +29,19 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
+
+  // زراعة البيانات التجريبية تلقائياً إذا كانت قاعدة البيانات فارغة (مثلاً عند أول تشغيل على Render)
+  try {
+    const dataSource = app.get(DataSource);
+    const userCount = await dataSource.getRepository(User).count();
+    if (userCount === 0 || process.env.FORCE_SEED === 'true') {
+      Logger.log('🌱 قاعدة البيانات فارغة — جاري زراعة البيانات التجريبية (Demo DB) تلقائياً...', 'Seeder');
+      await seedDatabase(dataSource);
+      Logger.log('✅ تمت زراعة البيانات التجريبية بنجاح!', 'Seeder');
+    }
+  } catch (err: any) {
+    Logger.warn(`⚠️ تعذر التحقق من البيانات التجريبية التلقائية: ${err?.message || err}`, 'Seeder');
+  }
 
   // ──────────────────────────────────────────────────────────
   // إعدادات وتوثيق Swagger / OpenAPI الكاملة
